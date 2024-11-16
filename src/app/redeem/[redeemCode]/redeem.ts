@@ -37,6 +37,19 @@ export async function redeem({
       };
     }
 
+    // Check if prize has reached maxRedeems
+    const { count: totalRedeems } = await supabase
+      .from("prizeRedeems")
+      .select("*", { count: "exact" })
+      .eq("prizeRedeemCode", redeemCode);
+
+    if (totalRedeems && totalRedeems >= prize.maxRedeems) {
+      return {
+        success: false,
+        error: "This prize has reached its maximum number of redeems",
+      };
+    }
+
     // Check if user already redeemed
     const { count: userRedeems } = await supabase
       .from("prizeRedeems")
