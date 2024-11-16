@@ -1,10 +1,15 @@
 import { useMutation } from "@tanstack/react-query";
 import { redeem } from "./redeem";
-import { PrizeRedeem } from "@/lib/types";
-import { RedeemInput } from "./redeem";
+import { RedeemInput, RedeemResponse } from "./redeem";
 
 export function useRedeem() {
-  return useMutation<PrizeRedeem, Error, RedeemInput>({
-    mutationFn: redeem,
+  return useMutation<RedeemResponse, Error, RedeemInput>({
+    mutationFn: async (input) => {
+      const response = await redeem(input);
+      if (!response.success) {
+        throw new Error(response.error);
+      }
+      return response;
+    },
   });
 }

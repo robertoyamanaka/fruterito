@@ -8,49 +8,75 @@ export type RedeemInput = {
   walletAddress: string;
   telegramUsername: string;
 };
+// ... existing imports ...
+
+export type RedeemResponse = {
+  success: boolean;
+  data?: PrizeRedeem;
+  error?: string;
+};
 
 export async function redeem({
   redeemCode,
   walletAddress,
   telegramUsername,
-}: RedeemInput) {
-  const supabase = await createSupabaseClient();
+}: RedeemInput): Promise<RedeemResponse> {
+  try {
+    const supabase = await createSupabaseClient();
 
-  const { data: prize, error: prizeError } = await supabase
-    .from("prizes")
-    .select("*")
-    .eq("redeemCode", redeemCode)
-    .single();
+    const { data: prize, error: prizeError } = await supabase
+      .from("prizes")
+      .select("*")
+      .eq("redeemCode", redeemCode)
+      .single();
 
-  if (prizeError || !prize) {
-    throw new Error("Invalid redeem code");
+    if (prizeError || !prize) {
+      return {
+        success: false,
+        error: "Invalid redeem code",
+      };
+    }
+
+    // Check if user already redeemed
+    const { count: userRedeems } = await supabase
+      .from("prizeRedeems")
+      .select("*", { count: "exact" })
+      .eq("prizeRedeemCode", redeemCode)
+      .eq("telegramUsername", telegramUsername);
+
+    if (userRedeems && userRedeems >= prize.maxRedeemsPerUser) {
+      return {
+        success: false,
+        error: "You have already redeemed this code",
+      };
+    }
+
+    // Insert redeem record
+    const { error: redeemError, data: redeemData } = await supabase
+      .from("prizeRedeems")
+      .insert({
+        prizeRedeemCode: redeemCode,
+        walletAddress,
+        telegramUsername,
+      })
+      .select();
+
+    if (redeemError) {
+      return {
+        success: false,
+        error: "Failed to redeem code",
+      };
+    }
+
+    return {
+      success: true,
+      data: redeemData[0] as PrizeRedeem,
+    };
+  } catch (error) {
+    console.error("error redeeming", error);
+    return {
+      success: false,
+      error: "An unexpected error occurred",
+    };
   }
-
-  // Check if user already redeemed
-  const { count: userRedeems } = await supabase
-    .from("prizeRedeems")
-    .select("*", { count: "exact" })
-    .eq("prizeRedeemCode", redeemCode)
-    .eq("telegramUsername", telegramUsername);
-
-  if (userRedeems && userRedeems >= prize.maxRedeemsPerUser) {
-    throw new Error("You have already redeemed this code");
-  }
-
-  // Insert redeem record
-  const { error: redeemError, data: redeemData } = await supabase
-    .from("prizeRedeems")
-    .insert({
-      prizeRedeemCode: redeemCode,
-      walletAddress,
-      telegramUsername,
-    })
-    .select();
-
-  console.log("redeemData", redeemData);
-  console.log("redeemError", redeemError);
-  if (redeemError) {
-    throw new Error("Failed to redeem code");
-  }
-  return redeemData[0] as PrizeRedeem;
 }
